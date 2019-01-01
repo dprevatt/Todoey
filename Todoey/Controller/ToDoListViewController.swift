@@ -8,37 +8,94 @@
 
 import UIKit
 import RealmSwift
+import ChameleonFramework
 
-class ToDoListViewController: UITableViewController {
+class ToDoListViewController: SwipeTableViewController {
 
     let realm = try! Realm()
     var toDoItems : Results<Item>?
     var selectedCategory: Category? {
         didSet {
             loadItems()
+            
         }
     }
     
     let defaults = UserDefaults.standard
+    @IBOutlet weak var searchBar: UISearchBar!
     
     let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
     
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        tableView.rowHeight = 80.0
+        tableView.separatorStyle = .none
         // Do any additional setup after loading the view, typically from a nib.
 //        print(dataFilePath)
         // Storing data to a file
     }
+    
+    // View Lifecycle Hook
+    override func viewDidAppear(_ animated: Bool) {
+        
+        guard let colorHex = selectedCategory?.bgColor else {
+            fatalError("No bgColor for selected category found.")
+        }
+            
+            title = selectedCategory!.name
+            
+
+            updateNavBar(withHexCode: colorHex)
+
+    }
+    
+    
+    // View Lifecycle hook
+    override func viewWillDisappear(_ animated: Bool) {
+        guard let originalColor = UIColor.init(hexString: "1D9BF6") else {
+            fatalError("Not a valid hex color")
+        }
+        
+        updateNavBar(withHexCode: "1D9BF6")
+    }
+    
+    //Mark: - Navbar Setup Methods
+    func updateNavBar(withHexCode colorHexCode: String) {
+        
+        guard let navBar = navigationController?.navigationBar else {
+            fatalError("Navigation Controller does not exist")
+        }
+        
+        guard let navBarColor = UIColor.init(hexString: colorHexCode) else {
+            fatalError("ColorHex is nil")
+        }
+        
+        navBar.barTintColor = navBarColor
+        navBar.tintColor = ContrastColorOf(navBarColor, returnFlat: true)
+        
+        navBar.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor : ContrastColorOf(navBarColor, returnFlat: true)]
+        
+        searchBar.barTintColor = navBarColor
+    }
+    
+    
 
     //MARK: TableView Datascource Methods
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
-        let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
         if let item = toDoItems?[indexPath.row] {
             
             cell.textLabel?.text = item.title
             cell.accessoryType = item.done ? .checkmark : .none
+            let calcPercentage = CGFloat(indexPath.row) / CGFloat(toDoItems!.count)
+            let categoryColor = UIColor.init(hexString: selectedCategory!.bgColor)
+            if let colour = categoryColor!.darken(byPercentage: calcPercentage) {
+                cell.backgroundColor = colour
+                cell.textLabel?.textColor = ContrastColorOf(colour, returnFlat: true)
+            }
+            
         } else {
             cell.textLabel?.text = "No Items Added"
         }
@@ -114,11 +171,6 @@ class ToDoListViewController: UITableViewController {
         
     }
     
-    //MARK: Save Items Function
-    func saveItems(toDoItem: Item) {
-        
-
-    }
     
     //MARK: Load Items Method
     func loadItems() {
@@ -126,6 +178,21 @@ class ToDoListViewController: UITableViewController {
         toDoItems = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
         tableView.reloadData()
 
+    }
+    
+    //MARK: - Delete data from swipe
+    override func updateModel(at indexPath: IndexPath) {
+        
+        if let item = toDoItems?[indexPath.row] {
+            do {
+                try realm.write {
+                    realm.delete(item)
+                    print("ToDo Deleted")
+                }
+            } catch {
+                print("An error occurred updating item status: \(error)")
+            }
+        }
     }
     
 
